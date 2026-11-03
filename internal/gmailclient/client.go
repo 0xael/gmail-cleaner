@@ -82,25 +82,45 @@ func (c *Client) PeekMetadata(ctx context.Context, ids []string, n int) ([]Peek,
 	if n > len(ids) {
 		n = len(ids)
 	}
-	out := make([]Peek, 0, n)
-	for _, id := range ids[:n] {
-		m, err := c.svc.Users.Messages.Get(userMe, id).
-			Format("metadata").
-			MetadataHeaders("From", "Subject").
-			Context(ctx).Do()
-		if err != nil {
-			return out, fmt.Errorf("messages.get %s: %w", id, err)
-		}
-		p := Peek{ID: id}
-		for _, h := range m.Payload.Headers {
-			switch h.Name {
-			case "From":
-				p.From = h.Value
-			case "Subject":
-				p.Subject = h.Value
+	out := make([]Peek, n)
+	sem := make(chan struct{}, trashConcurrency)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var firstErr error
+
+	for i, id := range ids[:n] {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int, id string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			m, err := c.svc.Users.Messages.Get(userMe, id).
+				Format("metadata").
+				MetadataHeaders("From", "Subject").
+				Context(ctx).Do()
+			if err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = fmt.Errorf("messages.get %s: %w", id, err)
+				}
+				mu.Unlock()
+				return
 			}
-		}
-		out = append(out, p)
+			p := Peek{ID: id}
+			for _, h := range m.Payload.Headers {
+				switch h.Name {
+				case "From":
+					p.From = h.Value
+				case "Subject":
+					p.Subject = h.Value
+				}
+			}
+			out[i] = p
+		}(i, id)
+	}
+	wg.Wait()
+	if firstErr != nil {
+		return out, firstErr
 	}
 	return out, nil
 }
