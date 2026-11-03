@@ -164,7 +164,8 @@ func Login(ctx context.Context, dir string) error {
 }
 
 // NewService returns a Gmail client authenticated with the cached token.
-// The underlying HTTP client refreshes the access token automatically.
+// The underlying HTTP client refreshes the access token automatically
+// and persists the updated token to disk.
 func NewService(ctx context.Context, dir string) (*gmail.Service, error) {
 	cfg, err := loadOAuthConfig(dir)
 	if err != nil {
@@ -174,8 +175,33 @@ func NewService(ctx context.Context, dir string) (*gmail.Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load token: %w (run `gmail-cleaner auth` first)", err)
 	}
-	client := cfg.Client(ctx, tok)
+	ts := &persistingTokenSource{
+		base: cfg.TokenSource(ctx, tok),
+		dir:  dir,
+		prev: tok,
+	}
+	client := oauth2.NewClient(ctx, ts)
 	return gmail.NewService(ctx, option.WithHTTPClient(client))
+}
+
+// persistingTokenSource wraps an oauth2.TokenSource and saves the token
+// to disk whenever it changes (i.e., after an automatic refresh).
+type persistingTokenSource struct {
+	base oauth2.TokenSource
+	dir  string
+	prev *oauth2.Token
+}
+
+func (p *persistingTokenSource) Token() (*oauth2.Token, error) {
+	tok, err := p.base.Token()
+	if err != nil {
+		return nil, err
+	}
+	if tok.AccessToken != p.prev.AccessToken {
+		_ = saveToken(p.dir, tok)
+		p.prev = tok
+	}
+	return tok, nil
 }
 
 func randomState() (string, error) {
