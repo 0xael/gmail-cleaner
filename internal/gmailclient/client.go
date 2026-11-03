@@ -155,7 +155,7 @@ func (c *Client) perMessageConcurrent(ctx context.Context, ids []string, op stri
 	sem := make(chan struct{}, trashConcurrency)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	var firstErr error
+	var errs []error
 
 	for _, id := range ids {
 		wg.Add(1)
@@ -165,15 +165,20 @@ func (c *Client) perMessageConcurrent(ctx context.Context, ids []string, op stri
 			defer func() { <-sem }()
 			if err := fn(ctx, id); err != nil {
 				mu.Lock()
-				if firstErr == nil {
-					firstErr = fmt.Errorf("%s %s: %w", op, id, err)
-				}
+				errs = append(errs, fmt.Errorf("%s %s: %w", op, id, err))
 				mu.Unlock()
 			}
 		}(id)
 	}
 	wg.Wait()
-	return firstErr
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errs[0]
+	default:
+		return fmt.Errorf("%d/%d %s operations failed; first: %w", len(errs), len(ids), op, errs[0])
+	}
 }
 
 // Delete permanently removes messages. IRREVERSIBLE.
