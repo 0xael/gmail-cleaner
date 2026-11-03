@@ -5,6 +5,9 @@ token.json
 # Local rules may reference personal email addresses / senders
 rules.yaml
 
+# Sort script contains personal sender addresses
+sort-inbox.sh
+
 # Cleanup tracking — contains personal inbox analysis
 CLEANUP.md
 
