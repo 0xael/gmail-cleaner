@@ -43,6 +43,11 @@ func Run(ctx context.Context, client *gmailclient.Client, rules []config.Rule, o
 	var firstErr error
 
 	for _, r := range rules {
+		select {
+		case <-ctx.Done():
+			return summary, ctx.Err()
+		default:
+		}
 		if opts.OnlyRule != "" && r.Name != opts.OnlyRule {
 			continue
 		}
