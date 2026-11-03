@@ -299,22 +299,6 @@ type LabelStats struct {
 	ThreadsUnread  int64
 }
 
-// InboxStats returns totals for the system INBOX label via a single
-// users.labels.get call. Much cheaper than paginating a search.
-func (c *Client) InboxStats(ctx context.Context) (LabelStats, error) {
-	l, err := c.svc.Users.Labels.Get(userMe, "INBOX").Context(ctx).Do()
-	if err != nil {
-		return LabelStats{}, fmt.Errorf("labels.get INBOX: %w", err)
-	}
-	return LabelStats{
-		Name:           l.Name,
-		MessagesTotal:  l.MessagesTotal,
-		MessagesUnread: l.MessagesUnread,
-		ThreadsTotal:   l.ThreadsTotal,
-		ThreadsUnread:  l.ThreadsUnread,
-	}, nil
-}
-
 // CreateFilterFromSender installs a Gmail filter that adds `labelID` to any
 // future incoming message whose From matches `sender`. Returns the created
 // filter's ID.
