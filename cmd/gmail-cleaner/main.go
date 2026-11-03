@@ -18,10 +18,6 @@ import (
 )
 
 func main() {
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})))
-
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
@@ -40,9 +36,27 @@ func rootCmd() *cobra.Command {
 		SilenceUsage: true,
 	}
 
-	var configDir string
+	var (
+		configDir string
+		verbose   bool
+		quiet     bool
+	)
 	root.PersistentFlags().StringVar(&configDir, "config-dir", "",
 		"directory holding credentials.json + token.json (default: ~/.config/gmail-cleaner)")
+	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable debug logging")
+	root.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "suppress info logging; show errors only")
+
+	root.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		level := slog.LevelInfo
+		if verbose {
+			level = slog.LevelDebug
+		} else if quiet {
+			level = slog.LevelError
+		}
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			Level: level,
+		})))
+	}
 
 	resolveDir := func() (string, error) {
 		if configDir != "" {
