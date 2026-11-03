@@ -27,10 +27,40 @@ const (
 const userMe = "me"
 
 type Client struct {
-	svc *gmail.Service
+	svc          *gmail.Service
+	labelCache   []*gmail.Label
+	filterCache  []*gmail.Filter
 }
 
 func New(svc *gmail.Service) *Client { return &Client{svc: svc} }
+
+func (c *Client) labels(ctx context.Context) ([]*gmail.Label, error) {
+	if c.labelCache != nil {
+		return c.labelCache, nil
+	}
+	resp, err := c.svc.Users.Labels.List(userMe).Context(ctx).Do()
+	if err != nil {
+		return nil, fmt.Errorf("labels.list: %w", err)
+	}
+	c.labelCache = resp.Labels
+	return c.labelCache, nil
+}
+
+func (c *Client) invalidateLabelCache() { c.labelCache = nil }
+
+func (c *Client) filters(ctx context.Context) ([]*gmail.Filter, error) {
+	if c.filterCache != nil {
+		return c.filterCache, nil
+	}
+	resp, err := c.svc.Users.Settings.Filters.List(userMe).Context(ctx).Do()
+	if err != nil {
+		return nil, fmt.Errorf("filters.list: %w", err)
+	}
+	c.filterCache = resp.Filter
+	return c.filterCache, nil
+}
+
+func (c *Client) invalidateFilterCache() { c.filterCache = nil }
 
 // Search returns up to `limit` message IDs matching `query` (Gmail search
 // syntax). If limit <= 0, all matching messages are returned. Paginates
@@ -223,11 +253,11 @@ func (c *Client) EnsureLabel(ctx context.Context, name string) (string, error) {
 	if id, ok := systemLabelID(name); ok {
 		return id, nil
 	}
-	resp, err := c.svc.Users.Labels.List(userMe).Context(ctx).Do()
+	labels, err := c.labels(ctx)
 	if err != nil {
-		return "", fmt.Errorf("labels.list: %w", err)
+		return "", err
 	}
-	for _, l := range resp.Labels {
+	for _, l := range labels {
 		if strings.EqualFold(l.Name, name) {
 			return l.Id, nil
 		}
@@ -240,6 +270,7 @@ func (c *Client) EnsureLabel(ctx context.Context, name string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("labels.create %q: %w", name, err)
 	}
+	c.invalidateLabelCache()
 	return created.Id, nil
 }
 
@@ -285,11 +316,11 @@ func (c *Client) InboxStats(ctx context.Context) (LabelStats, error) {
 // addLabelIds), returns that filter's ID and ok=false to indicate no
 // creation happened. This makes the command idempotent.
 func (c *Client) CreateFilterFromSender(ctx context.Context, sender, labelID string) (id string, created bool, err error) {
-	existing, err := c.svc.Users.Settings.Filters.List(userMe).Context(ctx).Do()
+	existing, err := c.filters(ctx)
 	if err != nil {
-		return "", false, fmt.Errorf("filters.list: %w", err)
+		return "", false, err
 	}
-	for _, f := range existing.Filter {
+	for _, f := range existing {
 		if f.Criteria == nil || f.Action == nil {
 			continue
 		}
@@ -311,6 +342,7 @@ func (c *Client) CreateFilterFromSender(ctx context.Context, sender, labelID str
 	if err != nil {
 		return "", false, fmt.Errorf("filters.create: %w", err)
 	}
+	c.invalidateFilterCache()
 	return created2.Id, true, nil
 }
 
@@ -400,17 +432,17 @@ type FilterInfo struct {
 
 // ListFilters returns all installed Gmail filters with label names resolved.
 func (c *Client) ListFilters(ctx context.Context) ([]FilterInfo, error) {
-	resp, err := c.svc.Users.Settings.Filters.List(userMe).Context(ctx).Do()
+	allFilters, err := c.filters(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("filters.list: %w", err)
+		return nil, err
 	}
 
-	labelsResp, err := c.svc.Users.Labels.List(userMe).Context(ctx).Do()
+	allLabels, err := c.labels(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("labels.list: %w", err)
+		return nil, err
 	}
-	labelMap := make(map[string]string, len(labelsResp.Labels))
-	for _, l := range labelsResp.Labels {
+	labelMap := make(map[string]string, len(allLabels))
+	for _, l := range allLabels {
 		labelMap[l.Id] = l.Name
 	}
 
@@ -426,8 +458,8 @@ func (c *Client) ListFilters(ctx context.Context) ([]FilterInfo, error) {
 		return names
 	}
 
-	out := make([]FilterInfo, 0, len(resp.Filter))
-	for _, f := range resp.Filter {
+	out := make([]FilterInfo, 0, len(allFilters))
+	for _, f := range allFilters {
 		info := FilterInfo{ID: f.Id}
 		if f.Criteria != nil {
 			info.From = f.Criteria.From
