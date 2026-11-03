@@ -742,5 +742,31 @@ func filtersCmd(resolveDir func() (string, error)) *cobra.Command {
 	}
 	list.Flags().BoolVar(&asJSON, "json", false, "output as JSON")
 	parent.AddCommand(list)
+
+	del := &cobra.Command{
+		Use:   "delete <filter-id>",
+		Short: "Delete a Gmail filter by ID.",
+		Long:  "Removes an installed Gmail filter. Use `filters list` to find filter IDs.",
+		Example: "  gmail-cleaner filters delete ANe1Bmj48u1JtxZqLoMy-IS8kx2ARkewoiUZwQ",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir, err := resolveDir()
+			if err != nil {
+				return err
+			}
+			svc, err := auth.NewService(cmd.Context(), dir)
+			if err != nil {
+				return err
+			}
+			client := gmailclient.New(svc)
+			if err := client.DeleteFilter(cmd.Context(), args[0]); err != nil {
+				return err
+			}
+			fmt.Printf("Deleted filter %s\n", args[0])
+			return nil
+		},
+	}
+	parent.AddCommand(del)
+
 	return parent
 }

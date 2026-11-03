@@ -477,3 +477,12 @@ func (c *Client) ListFilters(ctx context.Context) ([]FilterInfo, error) {
 	}
 	return out, nil
 }
+
+// DeleteFilter removes a Gmail filter by ID.
+func (c *Client) DeleteFilter(ctx context.Context, id string) error {
+	if err := c.svc.Users.Settings.Filters.Delete(userMe, id).Context(ctx).Do(); err != nil {
+		return fmt.Errorf("filters.delete %s: %w", id, err)
+	}
+	c.invalidateFilterCache()
+	return nil
+}
