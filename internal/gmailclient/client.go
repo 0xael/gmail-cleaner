@@ -53,7 +53,7 @@ func (c *Client) Search(ctx context.Context, query string, limit int) ([]string,
 		}
 		resp, err := call.Context(ctx).Do()
 		if err != nil {
-			return nil, fmt.Errorf("messages.list %q: %w", query, err)
+			return ids, fmt.Errorf("messages.list %q: %w", query, err)
 		}
 		for _, m := range resp.Messages {
 			ids = append(ids, m.Id)
