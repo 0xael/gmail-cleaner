@@ -404,7 +404,7 @@ func labelCmd(resolveDir func() (string, error)) *cobra.Command {
 			client := gmailclient.New(svc)
 			ctx := cmd.Context()
 
-			query := "from:" + sender
+			query := fmt.Sprintf("from:(%s)", sender)
 			ids, err := client.Search(ctx, query, maxRun)
 			if err != nil {
 				return err
