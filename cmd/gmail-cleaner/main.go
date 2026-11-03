@@ -220,13 +220,18 @@ func statsCmd(resolveDir func() (string, error)) *cobra.Command {
 }
 
 func countCmd(resolveDir func() (string, error)) *cobra.Command {
-	var asJSON bool
+	var (
+		asJSON bool
+		exact  bool
+	)
 	cmd := &cobra.Command{
 		Use:   "count <query>",
 		Short: "Count messages matching a Gmail query.",
-		Long:  "Counts all messages matching a Gmail search query without touching them.",
+		Long: "Returns an estimate of messages matching a Gmail search query (single API call). " +
+			"Use --exact for a precise count (paginates all results; slower for large sets).",
 		Example: "  gmail-cleaner count \"in:inbox is:unread\"\n" +
 			"  gmail-cleaner count \"in:inbox from:revolut.com\"\n" +
+			"  gmail-cleaner count --exact \"in:trash\"\n" +
 			"  gmail-cleaner count --json \"in:trash\"",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -240,21 +245,37 @@ func countCmd(resolveDir func() (string, error)) *cobra.Command {
 				return err
 			}
 			client := gmailclient.New(svc)
-			n, err := client.CountMessages(cmd.Context(), query)
-			if err != nil {
-				return err
+
+			var n int
+			if exact {
+				ids, err := client.Search(cmd.Context(), query, 0)
+				if err != nil {
+					return err
+				}
+				n = len(ids)
+			} else {
+				n, err = client.CountMessages(cmd.Context(), query)
+				if err != nil {
+					return err
+				}
 			}
+
 			if asJSON {
-				out := map[string]any{"query": query, "count": n}
+				out := map[string]any{"query": query, "count": n, "exact": exact}
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
 				return enc.Encode(out)
 			}
-			fmt.Printf("%d message(s) match %q\n", n, query)
+			if exact {
+				fmt.Printf("%d message(s) match %q\n", n, query)
+			} else {
+				fmt.Printf("~%d message(s) match %q (estimate; use --exact for precise count)\n", n, query)
+			}
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "output as JSON")
+	cmd.Flags().BoolVar(&exact, "exact", false, "paginate all results for an exact count (slower)")
 	return cmd
 }
 

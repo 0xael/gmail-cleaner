@@ -314,13 +314,14 @@ func (c *Client) CreateFilterFromSender(ctx context.Context, sender, labelID str
 	return created2.Id, true, nil
 }
 
-// CountMessages returns the number of messages matching a Gmail query.
+// CountMessages returns an estimate of messages matching a Gmail query.
+// Uses resultSizeEstimate from a single API call — fast but approximate.
 func (c *Client) CountMessages(ctx context.Context, query string) (int, error) {
-	ids, err := c.Search(ctx, query, 0)
+	resp, err := c.svc.Users.Messages.List(userMe).Q(query).MaxResults(1).Context(ctx).Do()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("messages.list %q: %w", query, err)
 	}
-	return len(ids), nil
+	return int(resp.ResultSizeEstimate), nil
 }
 
 // LabelStatsByName returns counts for any label (system or user-created).
