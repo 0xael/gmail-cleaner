@@ -112,6 +112,10 @@ func Login(ctx context.Context, dir string) error {
 	errCh := make(chan error, 1)
 	srv := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/callback" {
+				http.NotFound(w, r)
+				return
+			}
 			q := r.URL.Query()
 			if e := q.Get("error"); e != "" {
 				fmt.Fprintf(w, "Authorization failed: %s\n", e)
