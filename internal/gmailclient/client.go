@@ -7,6 +7,7 @@ package gmailclient
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"sync"
@@ -179,6 +180,9 @@ func (c *Client) batchModify(ctx context.Context, ids, add, remove []string) err
 		if err := c.svc.Users.Messages.BatchModify(userMe, req).Context(ctx).Do(); err != nil {
 			return fmt.Errorf("batchModify [%d:%d]: %w", start, end, err)
 		}
+		if len(ids) > batchModifyMax {
+			slog.Debug("batchModify progress", "processed", end, "total", len(ids))
+		}
 	}
 	return nil
 }
@@ -241,6 +245,9 @@ func (c *Client) Delete(ctx context.Context, ids []string) error {
 		req := &gmail.BatchDeleteMessagesRequest{Ids: ids[start:end]}
 		if err := c.svc.Users.Messages.BatchDelete(userMe, req).Context(ctx).Do(); err != nil {
 			return fmt.Errorf("batchDelete [%d:%d]: %w", start, end, err)
+		}
+		if len(ids) > batchDeleteMax {
+			slog.Debug("batchDelete progress", "processed", end, "total", len(ids))
 		}
 	}
 	return nil
