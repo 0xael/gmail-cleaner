@@ -17,6 +17,8 @@ import (
 	"github.com/alyelalwany/gmail-cleaner/internal/gmailclient"
 )
 
+var version = "dev"
+
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -75,6 +77,7 @@ func rootCmd() *cobra.Command {
 	root.AddCommand(purgeCmd(resolveDir))
 	root.AddCommand(untrashCmd(resolveDir))
 	root.AddCommand(filtersCmd(resolveDir))
+	root.AddCommand(versionCmd())
 	return root
 }
 
@@ -783,4 +786,14 @@ func filtersCmd(resolveDir func() (string, error)) *cobra.Command {
 	parent.AddCommand(del)
 
 	return parent
+}
+
+func versionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print the build version.",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println("gmail-cleaner", version)
+		},
+	}
 }
