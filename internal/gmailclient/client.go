@@ -384,3 +384,64 @@ func (c *Client) TopSenders(ctx context.Context, query string, sampleSize, limit
 	}
 	return sorted, total, nil
 }
+
+// FilterInfo describes an installed Gmail filter.
+type FilterInfo struct {
+	ID             string
+	From           string
+	To             string
+	Subject        string
+	Query          string
+	NegatedQuery   string
+	HasAttachment  bool
+	AddLabels      []string
+	RemoveLabels   []string
+}
+
+// ListFilters returns all installed Gmail filters with label names resolved.
+func (c *Client) ListFilters(ctx context.Context) ([]FilterInfo, error) {
+	resp, err := c.svc.Users.Settings.Filters.List(userMe).Context(ctx).Do()
+	if err != nil {
+		return nil, fmt.Errorf("filters.list: %w", err)
+	}
+
+	labelsResp, err := c.svc.Users.Labels.List(userMe).Context(ctx).Do()
+	if err != nil {
+		return nil, fmt.Errorf("labels.list: %w", err)
+	}
+	labelMap := make(map[string]string, len(labelsResp.Labels))
+	for _, l := range labelsResp.Labels {
+		labelMap[l.Id] = l.Name
+	}
+
+	resolveLabelIDs := func(ids []string) []string {
+		names := make([]string, 0, len(ids))
+		for _, id := range ids {
+			if name, ok := labelMap[id]; ok {
+				names = append(names, name)
+			} else {
+				names = append(names, id)
+			}
+		}
+		return names
+	}
+
+	out := make([]FilterInfo, 0, len(resp.Filter))
+	for _, f := range resp.Filter {
+		info := FilterInfo{ID: f.Id}
+		if f.Criteria != nil {
+			info.From = f.Criteria.From
+			info.To = f.Criteria.To
+			info.Subject = f.Criteria.Subject
+			info.Query = f.Criteria.Query
+			info.NegatedQuery = f.Criteria.NegatedQuery
+			info.HasAttachment = f.Criteria.HasAttachment
+		}
+		if f.Action != nil {
+			info.AddLabels = resolveLabelIDs(f.Action.AddLabelIds)
+			info.RemoveLabels = resolveLabelIDs(f.Action.RemoveLabelIds)
+		}
+		out = append(out, info)
+	}
+	return out, nil
+}

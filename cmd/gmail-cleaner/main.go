@@ -60,6 +60,7 @@ func rootCmd() *cobra.Command {
 	root.AddCommand(labelCmd(resolveDir))
 	root.AddCommand(purgeCmd(resolveDir))
 	root.AddCommand(untrashCmd(resolveDir))
+	root.AddCommand(filtersCmd(resolveDir))
 	return root
 }
 
@@ -668,4 +669,78 @@ func untrashCmd(resolveDir func() (string, error)) *cobra.Command {
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show what would happen; make no changes")
 	cmd.Flags().IntVar(&maxRun, "max", 0, "cap on messages to restore (0 = no cap)")
 	return cmd
+}
+
+func filtersCmd(resolveDir func() (string, error)) *cobra.Command {
+	parent := &cobra.Command{
+		Use:   "filters",
+		Short: "Manage Gmail filters.",
+	}
+
+	var asJSON bool
+	list := &cobra.Command{
+		Use:   "list",
+		Short: "List all installed Gmail filters.",
+		Example: "  gmail-cleaner filters list\n" +
+			"  gmail-cleaner filters list --json",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir, err := resolveDir()
+			if err != nil {
+				return err
+			}
+			svc, err := auth.NewService(cmd.Context(), dir)
+			if err != nil {
+				return err
+			}
+			client := gmailclient.New(svc)
+			filters, err := client.ListFilters(cmd.Context())
+			if err != nil {
+				return err
+			}
+
+			if asJSON {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				return enc.Encode(filters)
+			}
+
+			if len(filters) == 0 {
+				fmt.Println("No filters installed.")
+				return nil
+			}
+			fmt.Printf("%d filter(s):\n\n", len(filters))
+			for _, f := range filters {
+				fmt.Printf("  ID: %s\n", f.ID)
+				if f.From != "" {
+					fmt.Printf("    from:    %s\n", f.From)
+				}
+				if f.To != "" {
+					fmt.Printf("    to:      %s\n", f.To)
+				}
+				if f.Subject != "" {
+					fmt.Printf("    subject: %s\n", f.Subject)
+				}
+				if f.Query != "" {
+					fmt.Printf("    query:   %s\n", f.Query)
+				}
+				if f.NegatedQuery != "" {
+					fmt.Printf("    exclude: %s\n", f.NegatedQuery)
+				}
+				if f.HasAttachment {
+					fmt.Printf("    has:attachment\n")
+				}
+				if len(f.AddLabels) > 0 {
+					fmt.Printf("    +label:  %v\n", f.AddLabels)
+				}
+				if len(f.RemoveLabels) > 0 {
+					fmt.Printf("    -label:  %v\n", f.RemoveLabels)
+				}
+				fmt.Println()
+			}
+			return nil
+		},
+	}
+	list.Flags().BoolVar(&asJSON, "json", false, "output as JSON")
+	parent.AddCommand(list)
+	return parent
 }
