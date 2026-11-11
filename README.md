@@ -83,7 +83,6 @@ Run just one rule by name:
 gmail-cleaner run -c rules.yaml --rule old-promotions
 ```
 
-
 Validate the config without touching Gmail:
 
 ```
