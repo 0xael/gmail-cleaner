@@ -6,6 +6,7 @@ Rules are defined in YAML and map Gmail search queries to actions
 and as a scheduled cronjob or serverless function later — the same cached
 refresh token works for both.
 
+
 ## Setup
 
 ### 1. Enable the Gmail API and get OAuth credentials
